@@ -1,5 +1,6 @@
 from typing import Generator
 
+from PIL import Image
 from django.db import models
 from storages.backends.s3boto3 import S3Boto3Storage
 
@@ -77,11 +78,11 @@ class Compare(models.Model):
     @staticmethod
     def compare(full: Video, short: Video) -> "Compare":
         full_images, short_images = [
-            [kf.image for kf in obj.key_frames.all()]
+            list(map(Image.open, (kf.image for kf in obj.key_frames.all())))
             for obj in [full, short]
-        ]  # type: list[models.ImageField], list[models.ImageField]
+        ]  # type: Generator[Image.Image, None, None], Generator[Image.Image, None, None]
 
-        score, version = utils.compare_keyframes(full_images, short_images)  # type: int, int
+        score, version = utils.compare_keyframes(short_images, full_images)  # type: int, int
 
         c, created = Compare.objects.get_or_create(
             defaults=dict(score=score),

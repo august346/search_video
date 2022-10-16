@@ -7,11 +7,9 @@ from django.core.validators import BaseValidator
 from django.utils.deconstruct import deconstructible
 from django.utils.translation import gettext_lazy as _
 from rest_framework import viewsets, serializers, status, exceptions
-from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from api import models, utils
-from api.some import extractor
 
 
 class CR(serializers.ModelSerializer):

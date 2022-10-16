@@ -5,6 +5,7 @@ import tempfile
 from io import BytesIO
 from typing import Generator
 
+import numpy as np
 from PIL import Image
 from django.core.files.base import ContentFile
 from django.db.models.fields.files import FieldFile
@@ -27,10 +28,6 @@ def get_hash(file: BytesIO) -> str:
 def get_key_frames(file) -> Generator[Image.Image, None, None]:
     for _ in range(10):
         yield Image.new('RGB', (10, 10))
-
-
-def compare_keyframes(set_0: list[Image], set_1: list[Image]) -> tuple[int, int]:
-    return 1, 0
 
 
 def get_img_md5_and_content(img: Image.Image) -> tuple[str, ContentFile]:
@@ -63,3 +60,36 @@ def _extract(src_fp: str, dst_path: str) -> Generator[Image.Image, None, None]:
     for file_name in os.listdir(dst_path):
         with Image.open(os.path.join(dst_path, file_name)) as im:
             yield im
+
+
+def compare_keyframes(
+        set_0: Generator[Image.Image, None, None],
+        set_1: Generator[Image.Image, None, None]
+) -> tuple[int, int]:
+    # return 1, 0
+
+    max_list = []
+    for ind, i0 in enumerate(set_0):
+        max_list.append(0)
+        for i1 in set_1:
+            max_list[ind] = max(max_list[ind], _compare_images(i0, i1))
+
+    return sum(max_list) / len(max_list), 0
+
+
+def _compare_images(i0: Image.Image, i1: Image.Image):
+    # https://rosettacode.org/wiki/Percentage_difference_between_images#Python
+
+    assert i0.mode == i1.mode, "Different kinds of images."
+    assert i0.size == i1.size, "Different sizes."
+
+    pairs = zip(i0.getdata(), i1.getdata())
+    if len(i0.getbands()) == 1:
+        dif = sum(abs(p1 - p2) for p1, p2 in pairs)
+    else:
+        dif = sum(abs(c1 - c2) for p1, p2 in pairs for c1, c2 in zip(p1, p2))
+
+    n_components = i0.size[0] * i0.size[1] * 3
+    result = round((dif / 255.0 * 10000) / n_components)
+
+    return result
