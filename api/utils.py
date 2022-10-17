@@ -5,10 +5,13 @@ import tempfile
 from io import BytesIO
 from typing import Generator
 
-import numpy as np
 from PIL import Image
 from django.core.files.base import ContentFile
 from django.db.models.fields.files import FieldFile
+
+import scipy as sp
+from matplotlib.pyplot import imread
+from scipy.signal.signaltools import correlate2d as c2d
 
 _RUN_CMD_TEMPLATE = "ffmpeg -skip_frame nokey -i {} -vsync 2 -s 10x10 -r 30 -f image2 {}/thumbnails-%02d.jpeg"
 
@@ -32,10 +35,10 @@ def get_key_frames(file) -> Generator[Image.Image, None, None]:
 
 def get_img_md5_and_content(img: Image.Image) -> tuple[str, ContentFile]:
     with BytesIO() as f:
-        img.save(f, format='PNG', quality=100)
+        img.save(f, format='JPEG', quality=100)
         f.seek(0)
         md5: str = get_hash(f)
-        img_content = ContentFile(f.getvalue(), f'{md5}.png')
+        img_content = ContentFile(f.getvalue(), f'{md5}.jpg')
         return md5, img_content
 
 
@@ -78,18 +81,12 @@ def compare_keyframes(
 
 
 def _compare_images(i0: Image.Image, i1: Image.Image):
-    # https://rosettacode.org/wiki/Percentage_difference_between_images#Python
+    def get(img: Image.Image):
+        with tempfile.NamedTemporaryFile() as f:
+            img.save(f, format='JPEG', quality=100)
+            f.seek(0)
+            data = imread(f)
+            data = sp.inner(data, [299, 587, 114]) / 1000.0
+            return (data - data.mean()) / data.std()
 
-    assert i0.mode == i1.mode, "Different kinds of images."
-    assert i0.size == i1.size, "Different sizes."
-
-    pairs = zip(i0.getdata(), i1.getdata())
-    if len(i0.getbands()) == 1:
-        dif = sum(abs(p1 - p2) for p1, p2 in pairs)
-    else:
-        dif = sum(abs(c1 - c2) for p1, p2 in pairs for c1, c2 in zip(p1, p2))
-
-    n_components = i0.size[0] * i0.size[1] * 3
-    result = round((dif / 255.0 * 10000) / n_components)
-
-    return result
+    return c2d(get(i0), get(i1), mode='same').max()
