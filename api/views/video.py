@@ -4,6 +4,7 @@ from typing import Optional
 from django import forms
 from django.core.files.uploadedfile import TemporaryUploadedFile
 from django.core.validators import BaseValidator
+from django.db.models import Prefetch
 from django.utils.deconstruct import deconstructible
 from django.utils.translation import gettext_lazy as _
 from rest_framework import viewsets, serializers, status, exceptions
@@ -12,10 +13,18 @@ from rest_framework.response import Response
 from api import models, utils
 
 
+class VideoLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Video
+        fields = ["id", "file"]
+
+
 class CR(serializers.ModelSerializer):
+    full = VideoLinkSerializer()
+
     class Meta:
         model = models.Compare
-        fields = '__all__'
+        fields = ["version", "score", "full"]
 
 
 class KF(serializers.ModelSerializer):
@@ -25,12 +34,12 @@ class KF(serializers.ModelSerializer):
 
 
 class VideoSerializer(serializers.ModelSerializer):
-    key_frames = KF(many=True)
+    # key_frames = KF(many=True)
     compare_results = CR(many=True)
 
     class Meta:
         model = models.Video
-        fields = '__all__'
+        exclude = ["key_frames"]
 
 
 @deconstructible

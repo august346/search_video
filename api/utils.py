@@ -14,6 +14,8 @@ from matplotlib.pyplot import imread
 from scipy.signal.signaltools import correlate2d as c2d
 
 _RUN_CMD_TEMPLATE = "ffmpeg -skip_frame nokey -i {} -vsync 2 -s 10x10 -r 30 -f image2 {}/thumbnails-%02d.jpeg"
+KEY_FRAME_EXTRACT_ALGO_VERSION = 0
+COMPARE_ALGO_VERSION = 0
 
 
 def get_hash(file: BytesIO) -> str:
@@ -42,7 +44,7 @@ def get_img_md5_and_content(img: Image.Image) -> tuple[str, ContentFile]:
         return md5, img_content
 
 
-def get_keyframes(video_file: FieldFile) -> Generator[Image.Image, None, None]:
+def get_keyframes(video_file: FieldFile) -> Generator[tuple[Image.Image, int], None, None]:
     with tempfile.TemporaryDirectory() as temp_dir:
         src_path: str = os.path.join(temp_dir, "src")
         dst_path: str = os.path.join(temp_dir, "dst")
@@ -57,17 +59,16 @@ def get_keyframes(video_file: FieldFile) -> Generator[Image.Image, None, None]:
             yield from _extract(temp_file.name, dst_path)
 
 
-def _extract(src_fp: str, dst_path: str) -> Generator[Image.Image, None, None]:
+def _extract(src_fp: str, dst_path: str) -> Generator[tuple[Image.Image, int], None, None]:
     subprocess.run(_RUN_CMD_TEMPLATE.format(src_fp, dst_path).split(" "))
 
     for file_name in os.listdir(dst_path):
         with Image.open(os.path.join(dst_path, file_name)) as im:
-            yield im
+            yield im, KEY_FRAME_EXTRACT_ALGO_VERSION
 
 
 def compare_keyframes(
-        set_0: Generator[Image.Image, None, None],
-        set_1: Generator[Image.Image, None, None]
+        set_0: Generator[Image.Image, None, None], set_1: Generator[Image.Image, None, None]
 ) -> tuple[int, int]:
     # return 1, 0
 
@@ -77,10 +78,11 @@ def compare_keyframes(
         for i1 in set_1:
             max_list[ind] = max(max_list[ind], _compare_images(i0, i1))
 
-    return sum(max_list) / len(max_list), 0
+    return sum(max_list) / len(max_list), COMPARE_ALGO_VERSION
 
 
 def _compare_images(i0: Image.Image, i1: Image.Image):
+    # https://stackoverflow.com/questions/1819124/image-comparison-algorithm
     def get(img: Image.Image):
         with tempfile.NamedTemporaryFile() as f:
             img.save(f, format='JPEG', quality=100)
